@@ -66,8 +66,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 def get_db():
     conn = psycopg2.connect(
         DATABASE_URL,
-        sslmode="require",
-        options="-c client_encoding=UTF8"
+        sslmode="require"
     )
     return conn
 
