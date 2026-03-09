@@ -9,6 +9,7 @@ from twilio.twiml.voice_response import VoiceResponse, Gather
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, time, timedelta
 
+
 import mysql.connector
 
 # ======================================================
@@ -34,11 +35,16 @@ MYSQL_DB = os.getenv("MYSQL_DB")
 # CALL TIME (HOUR, MINUTE, SECOND)
 FIXED_CALL_TIME = time(15, 49, 0)
 
+
 # ======================================================
 # FASTAPI APP
 # ======================================================
 
 app = FastAPI()
+
+@app.get("/")
+def home():
+    return {"status": "AI Insurance Voice Agent Running"}
 
 app.add_middleware(
     CORSMiddleware,
