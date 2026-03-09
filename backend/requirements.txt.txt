@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+twilio
+mysql-connector-python
+python-dotenv
+apscheduler
