@@ -61,7 +61,10 @@ twilio_client = Client(TWILIO_SID, TWILIO_AUTH)
 # ======================================================
 
 def get_db():
-    conn = psycopg2.connect(DATABASE_URL)
+    conn = psycopg2.connect(
+        DATABASE_URL,
+        sslmode="require"
+    )
     return conn
 
 
