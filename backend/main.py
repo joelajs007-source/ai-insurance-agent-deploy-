@@ -9,7 +9,7 @@ from twilio.twiml.voice_response import VoiceResponse, Gather
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, time, timedelta
 
-
+import psycopg2
 import mysql.connector
 
 # ======================================================
@@ -54,6 +54,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # ======================================================
 # TWILIO CLIENT
 # ======================================================
@@ -72,6 +73,14 @@ def get_db():
         database=MYSQL_DB
     )
 
+
+import os
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+def get_db():
+    conn = psycopg2.connect(DATABASE_URL)
+    return conn
 # ======================================================
 # CALL FUNCTION
 # ======================================================

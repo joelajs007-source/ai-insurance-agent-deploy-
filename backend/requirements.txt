@@ -4,3 +4,4 @@ twilio
 mysql-connector-python
 python-dotenv
 apscheduler
+psycopg2-binary
