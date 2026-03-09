@@ -1,0 +1,289 @@
+body{
+margin:0;
+font-family:Inter,system-ui;
+background:#f5f7fb;
+color:#1e293b;
+}
+
+/* MAIN LAYOUT */
+
+.app{
+display:flex;
+min-height:100vh;
+}
+
+/* SIDEBAR */
+
+.sidebar{
+width:250px;
+background:linear-gradient(180deg,#0f172a,#020617);
+color:white;
+padding:28px;
+box-shadow:4px 0 20px rgba(0,0,0,0.25);
+}
+
+.logo{
+font-size:22px;
+font-weight:600;
+margin-bottom:35px;
+}
+
+/* NAV BUTTONS */
+
+.navBtn{
+display:flex;
+align-items:center;
+gap:10px;
+width:100%;
+padding:12px;
+border:none;
+border-radius:10px;
+background:transparent;
+color:#cbd5f5;
+font-size:15px;
+cursor:pointer;
+margin-bottom:10px;
+transition:all .25s;
+}
+
+.navBtn:hover{
+background:#1e293b;
+color:white;
+transform:translateX(4px);
+}
+
+/* MAIN AREA */
+
+.main{
+flex:1;
+padding:40px;
+}
+
+/* TITLES */
+
+.title{
+font-size:28px;
+font-weight:600;
+margin-bottom:25px;
+}
+
+/* CARDS */
+
+.cards{
+display:grid;
+grid-template-columns:repeat(3,1fr);
+gap:25px;
+margin-bottom:30px;
+}
+
+.card{
+background:white;
+padding:24px;
+border-radius:14px;
+box-shadow:0 10px 25px rgba(0,0,0,0.05);
+transition:.25s;
+}
+
+.card:hover{
+transform:translateY(-4px);
+box-shadow:0 16px 30px rgba(0,0,0,0.08);
+}
+
+.card h3{
+margin-top:10px;
+font-size:15px;
+color:#64748b;
+}
+
+.card p{
+font-size:26px;
+font-weight:600;
+margin-top:5px;
+}
+
+/* TABLE */
+
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:10px;
+}
+
+thead{
+background:#f1f5f9;
+}
+
+th{
+text-align:left;
+padding:14px;
+font-size:14px;
+color:#475569;
+}
+
+td{
+padding:14px;
+border-bottom:1px solid #e2e8f0;
+font-size:14px;
+}
+
+tr:hover{
+background:#f8fafc;
+cursor:pointer;
+}
+
+/* SEARCH */
+
+.search{
+padding:10px 14px;
+border-radius:8px;
+border:1px solid #e2e8f0;
+margin-bottom:18px;
+width:260px;
+font-size:14px;
+}
+
+/* BUTTONS */
+
+.callBtn{
+background:#2563eb;
+color:white;
+border:none;
+padding:8px 14px;
+border-radius:8px;
+font-size:13px;
+cursor:pointer;
+transition:.2s;
+}
+
+.callBtn:hover{
+background:#1d4ed8;
+}
+
+/* ADD BUTTON */
+
+.addBtn{
+background:#16a34a;
+color:white;
+border:none;
+padding:10px 16px;
+border-radius:8px;
+font-size:14px;
+cursor:pointer;
+}
+
+.addBtn:hover{
+background:#15803d;
+}
+
+/* HEADER ROW */
+
+.headerRow{
+display:flex;
+justify-content:space-between;
+align-items:center;
+margin-bottom:20px;
+}
+
+/* CUSTOMER PROFILE */
+
+.profile{
+position:fixed;
+right:30px;
+top:100px;
+width:260px;
+background:white;
+padding:22px;
+border-radius:14px;
+box-shadow:0 10px 30px rgba(0,0,0,0.12);
+animation:slide .25s ease;
+}
+
+.profile h2{
+margin-bottom:15px;
+}
+
+.profile button{
+margin-top:10px;
+padding:8px 12px;
+border:none;
+border-radius:6px;
+background:#e11d48;
+color:white;
+cursor:pointer;
+}
+
+/* MODAL */
+
+.modal{
+position:fixed;
+top:0;
+left:0;
+right:0;
+bottom:0;
+background:rgba(0,0,0,.35);
+display:flex;
+align-items:center;
+justify-content:center;
+}
+
+.modalCard{
+background:white;
+padding:28px;
+border-radius:14px;
+width:330px;
+box-shadow:0 20px 40px rgba(0,0,0,0.15);
+}
+
+.modalCard h2{
+margin-bottom:15px;
+}
+
+.modalCard input{
+width:100%;
+padding:10px;
+margin-bottom:10px;
+border-radius:8px;
+border:1px solid #e2e8f0;
+}
+
+.modalCard button{
+width:100%;
+padding:10px;
+border:none;
+border-radius:8px;
+background:#2563eb;
+color:white;
+cursor:pointer;
+}
+
+/* AI CONTROL */
+
+.controlBtn{
+background:#2563eb;
+color:white;
+padding:12px 18px;
+border:none;
+border-radius:10px;
+cursor:pointer;
+font-size:14px;
+margin-top:10px;
+}
+
+/* CHART */
+
+.chart{
+margin-top:20px;
+}
+
+/* ANIMATION */
+
+@keyframes slide{
+from{
+transform:translateX(20px);
+opacity:0;
+}
+to{
+transform:translateX(0);
+opacity:1;
+}
+}
