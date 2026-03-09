@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI, Request
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,29 +9,23 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, time, timedelta
 
 import psycopg2
-import mysql.connector
+import psycopg2.extras
+import os
+
 
 # ======================================================
 # CONFIG
 # ======================================================
 
-import os
-
 TWILIO_SID = os.getenv("TWILIO_SID")
 TWILIO_AUTH = os.getenv("TWILIO_AUTH")
 TWILIO_NUMBER = os.getenv("TWILIO_NUMBER")
 
-
-
 NGROK_URL = os.getenv("NGROK_URL")
 
-MYSQL_HOST = os.getenv("MYSQL_HOST")
-MYSQL_USER = os.getenv("MYSQL_USER")
-MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")
-MYSQL_DB = os.getenv("MYSQL_DB")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-
-# CALL TIME (HOUR, MINUTE, SECOND)
+# Call time (hour, minute, second)
 FIXED_CALL_TIME = time(15, 49, 0)
 
 
@@ -45,6 +38,7 @@ app = FastAPI()
 @app.get("/")
 def home():
     return {"status": "AI Insurance Voice Agent Running"}
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -61,26 +55,16 @@ app.add_middleware(
 
 twilio_client = Client(TWILIO_SID, TWILIO_AUTH)
 
+
 # ======================================================
-# DATABASE
+# DATABASE CONNECTION
 # ======================================================
-
-def get_db():
-    return mysql.connector.connect(
-        host=MYSQL_HOST,
-        user=MYSQL_USER,
-        password=MYSQL_PASSWORD,
-        database=MYSQL_DB
-    )
-
-
-import os
-
-DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_db():
     conn = psycopg2.connect(DATABASE_URL)
     return conn
+
+
 # ======================================================
 # CALL FUNCTION
 # ======================================================
@@ -95,8 +79,9 @@ def trigger_call(customer_id, phone):
 
     print("Calling:", phone)
 
+
 # ======================================================
-# AUTO CALL FUNCTION
+# AUTO CALL ENGINE
 # ======================================================
 
 def enterprise_auto_call():
@@ -104,7 +89,7 @@ def enterprise_auto_call():
     print("Running scheduled call job")
 
     conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     cursor.execute("""
         SELECT * FROM customers
@@ -128,6 +113,7 @@ def enterprise_auto_call():
     cursor.close()
     conn.close()
 
+
 # ======================================================
 # VOICE HANDLER
 # ======================================================
@@ -140,7 +126,7 @@ async def voice(request: Request):
     customer_id = request.query_params.get("customer_id")
 
     conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     cursor.execute("SELECT * FROM customers WHERE id=%s", (customer_id,))
     customer = cursor.fetchone()
@@ -169,6 +155,9 @@ async def voice(request: Request):
         response.say("No response received. Goodbye.")
         response.hangup()
 
+        cursor.close()
+        conn.close()
+
         return Response(str(response), media_type="application/xml")
 
     ai_reply = "Thank you for your response."
@@ -189,6 +178,7 @@ async def voice(request: Request):
 
     return Response(str(response), media_type="application/xml")
 
+
 # ======================================================
 # API ENDPOINTS
 # ======================================================
@@ -197,7 +187,7 @@ async def voice(request: Request):
 def get_customers():
 
     conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     cursor.execute("SELECT * FROM customers")
     data = cursor.fetchall()
@@ -207,11 +197,12 @@ def get_customers():
 
     return data
 
+
 @app.get("/call-logs")
 def get_logs():
 
     conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     cursor.execute("""
         SELECT
@@ -234,18 +225,23 @@ def get_logs():
 
     return logs
 
+
 @app.post("/make-call/{customer_id}")
 def make_call(customer_id: int):
 
     conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     cursor.execute("SELECT phone FROM customers WHERE id=%s",(customer_id,))
     customer = cursor.fetchone()
 
     trigger_call(customer_id, customer["phone"])
 
+    cursor.close()
+    conn.close()
+
     return {"message":"call started"}
+
 
 # ======================================================
 # SCHEDULER
@@ -256,7 +252,6 @@ scheduler = BackgroundScheduler()
 def schedule_next_run():
 
     now = datetime.now()
-
     run_time = datetime.combine(now.date(), FIXED_CALL_TIME)
 
     if run_time < now:
@@ -270,9 +265,10 @@ def schedule_next_run():
 
     print("Next call scheduled at:", run_time)
 
-schedule_next_run()
 
+schedule_next_run()
 scheduler.start()
+
 
 @app.on_event("shutdown")
 def shutdown():
