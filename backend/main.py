@@ -34,8 +34,9 @@ DB_PORT = int(os.getenv("DB_PORT", 5432))
 MAX_CALLS_PER_DAY = 3
 BUSINESS_START = time(7, 0)
 BUSINESS_END = time(22, 0)
-FIXED_CALL_TIME = time(7, 13)  # Change to your preferred time
-
+call_time_str = os.getenv("FIXED_CALL_TIME", "07:13")
+h, m = map(int, call_time_str.split(":"))
+FIXED_CALL_TIME = time(h, m)
 # ======================================================
 # ================== APP ===============================
 # ======================================================
