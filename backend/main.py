@@ -34,10 +34,6 @@ MAX_CALLS_PER_DAY = 3
 BUSINESS_START = time(7, 0)
 BUSINESS_END = time(22, 0)
 
-call_time_str = os.getenv("FIXED_CALL_TIME", "07:13")
-h, m = map(int, call_time_str.split(":"))
-FIXED_CALL_TIME = time(h, m)
-
 # ======================================================
 # ================== APP ===============================
 # ======================================================
@@ -109,15 +105,20 @@ def keep_alive():
 
 def enterprise_auto_call():
     try:
+        # Read call time dynamically every minute — no redeploy needed!
+        call_time_str = os.getenv("FIXED_CALL_TIME", "07:13")
+        h, m = map(int, call_time_str.split(":"))
+        FIXED_CALL_TIME = time(h, m)
+
         now = datetime.now(IST)
-        current_time = now.time()
+        current_time = now.time().replace(tzinfo=None)
 
         print(f"Scheduler tick — IST time: {now.strftime('%H:%M:%S')} | Target: {FIXED_CALL_TIME.hour}:{FIXED_CALL_TIME.minute:02d}")
 
         if current_time.hour != FIXED_CALL_TIME.hour or current_time.minute != FIXED_CALL_TIME.minute:
             return
 
-        if not (BUSINESS_START <= current_time.replace(tzinfo=None) <= BUSINESS_END):
+        if not (BUSINESS_START <= current_time <= BUSINESS_END):
             print("Outside business hours")
             return
 
@@ -265,11 +266,14 @@ def home():
 @app.get("/server-time")
 def server_time():
     now = datetime.now(IST)
+    call_time_str = os.getenv("FIXED_CALL_TIME", "07:13")
+    h, m = map(int, call_time_str.split(":"))
+    fixed = time(h, m)
     return {
         "ist_time": now.strftime("%H:%M:%S"),
         "ist_date": now.strftime("%Y-%m-%d"),
-        "fixed_call_time": f"{FIXED_CALL_TIME.hour}:{FIXED_CALL_TIME.minute:02d}",
-        "match": now.hour == FIXED_CALL_TIME.hour and now.minute == FIXED_CALL_TIME.minute
+        "fixed_call_time": f"{fixed.hour}:{fixed.minute:02d}",
+        "match": now.hour == fixed.hour and now.minute == fixed.minute
     }
 
 @app.get("/customers")
