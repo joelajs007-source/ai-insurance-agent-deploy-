@@ -10,6 +10,14 @@ from datetime import datetime, time
 from dotenv import load_dotenv
 import os
 import urllib.request
+from datetime import datetime, time
+import pytz
+
+IST = pytz.timezone("Asia/Kolkata")
+
+def enterprise_auto_call():
+    now = datetime.now(IST)
+    current_time = now.time()
 
 # ======================================================
 # ================== LOAD ENV ==========================
