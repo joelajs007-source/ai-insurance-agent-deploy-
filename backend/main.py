@@ -10,14 +10,7 @@ from datetime import datetime, time
 from dotenv import load_dotenv
 import os
 import urllib.request
-from datetime import datetime, time
 import pytz
-
-IST = pytz.timezone("Asia/Kolkata")
-
-def enterprise_auto_call():
-    now = datetime.now(IST)
-    current_time = now.time()
 
 # ======================================================
 # ================== LOAD ENV ==========================
@@ -34,6 +27,8 @@ TWILIO_AUTH = os.getenv("TWILIO_AUTH")
 TWILIO_NUMBER = os.getenv("TWILIO_NUMBER")
 NGROK_URL = os.getenv("NGROK_URL")
 DATABASE_URL = os.getenv("DATABASE_URL")
+
+IST = pytz.timezone("Asia/Kolkata")
 
 MAX_CALLS_PER_DAY = 3
 BUSINESS_START = time(7, 0)
@@ -113,53 +108,59 @@ def keep_alive():
 # ======================================================
 
 def enterprise_auto_call():
+    try:
+        now = datetime.now(IST)
+        current_time = now.time()
 
-    now = datetime.now()
-    current_time = now.time()
+        print(f"Scheduler tick — IST time: {now.strftime('%H:%M:%S')} | Target: {FIXED_CALL_TIME.hour}:{FIXED_CALL_TIME.minute:02d}")
 
-    if current_time.hour != FIXED_CALL_TIME.hour or current_time.minute != FIXED_CALL_TIME.minute:
-        return
+        if current_time.hour != FIXED_CALL_TIME.hour or current_time.minute != FIXED_CALL_TIME.minute:
+            return
 
-    if not (BUSINESS_START <= current_time <= BUSINESS_END):
-        print("Outside business hours")
-        return
+        if not (BUSINESS_START <= current_time.replace(tzinfo=None) <= BUSINESS_END):
+            print("Outside business hours")
+            return
 
-    conn = get_db()
-    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-
-    cursor.execute("""
-        UPDATE customers
-        SET daily_call_count = 0
-        WHERE last_call_date IS NOT NULL
-        AND last_call_date < CURRENT_DATE
-    """)
-    conn.commit()
-
-    cursor.execute("""
-        SELECT * FROM customers
-        WHERE due_date <= CURRENT_DATE + INTERVAL '3 days'
-        AND payment_status = 'pending'
-        AND consent_flag = TRUE
-        AND daily_call_count < %s
-    """, (MAX_CALLS_PER_DAY,))
-
-    customers = cursor.fetchall()
-
-    for customer in customers:
-        trigger_call(customer["id"], customer["phone"])
+        conn = get_db()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
         cursor.execute("""
             UPDATE customers
-            SET daily_call_count = daily_call_count + 1,
-                last_call_date = CURRENT_DATE
-            WHERE id = %s
-        """, (customer["id"],))
+            SET daily_call_count = 0
+            WHERE last_call_date IS NOT NULL
+            AND last_call_date < CURRENT_DATE
+        """)
+        conn.commit()
 
-    conn.commit()
-    cursor.close()
-    conn.close()
+        cursor.execute("""
+            SELECT * FROM customers
+            WHERE due_date <= CURRENT_DATE + INTERVAL '3 days'
+            AND payment_status = 'pending'
+            AND consent_flag = TRUE
+            AND daily_call_count < %s
+        """, (MAX_CALLS_PER_DAY,))
 
-    print(f"Auto-called {len(customers)} customers")
+        customers = cursor.fetchall()
+        print(f"Eligible customers to call: {len(customers)}")
+
+        for customer in customers:
+            trigger_call(customer["id"], customer["phone"])
+
+            cursor.execute("""
+                UPDATE customers
+                SET daily_call_count = daily_call_count + 1,
+                    last_call_date = CURRENT_DATE
+                WHERE id = %s
+            """, (customer["id"],))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        print(f"Auto-called {len(customers)} customers")
+
+    except Exception as e:
+        print(f"Auto call error: {e}")
 
 # ======================================================
 # ================== VOICE HANDLER =====================
@@ -260,6 +261,16 @@ async def voice(request: Request):
 @app.get("/")
 def home():
     return {"status": "Enterprise Auto Call System Running"}
+
+@app.get("/server-time")
+def server_time():
+    now = datetime.now(IST)
+    return {
+        "ist_time": now.strftime("%H:%M:%S"),
+        "ist_date": now.strftime("%Y-%m-%d"),
+        "fixed_call_time": f"{FIXED_CALL_TIME.hour}:{FIXED_CALL_TIME.minute:02d}",
+        "match": now.hour == FIXED_CALL_TIME.hour and now.minute == FIXED_CALL_TIME.minute
+    }
 
 @app.get("/customers")
 def get_customers():
