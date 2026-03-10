@@ -6,9 +6,10 @@ from twilio.twiml.voice_response import VoiceResponse, Gather
 from apscheduler.schedulers.background import BackgroundScheduler
 import psycopg2
 import psycopg2.extras
-from datetime import datetime, timedelta, time
+from datetime import datetime, time
 from dotenv import load_dotenv
 import os
+import urllib.request
 
 # ======================================================
 # ================== LOAD ENV ==========================
@@ -20,23 +21,20 @@ load_dotenv()
 # ================== CONFIG ============================
 # ======================================================
 
-TWILIO_SID = os.getenv("TWILIO_SID", "AC95a528483e58c1a6af1d303dcc43aa18")
-TWILIO_AUTH = os.getenv("TWILIO_AUTH", "a50216919bae76594aa87828923cb939")
-TWILIO_NUMBER = os.getenv("TWILIO_NUMBER", "+19156130437")
-NGROK_URL = os.getenv("NGROK_URL", "https://protuberantly-exemptible-eldon.ngrok-free.dev")
-
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
-DB_NAME = os.getenv("DB_NAME", "ai_insurance")
-DB_PORT = int(os.getenv("DB_PORT", 5432))
+TWILIO_SID = os.getenv("TWILIO_SID")
+TWILIO_AUTH = os.getenv("TWILIO_AUTH")
+TWILIO_NUMBER = os.getenv("TWILIO_NUMBER")
+NGROK_URL = os.getenv("NGROK_URL")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 MAX_CALLS_PER_DAY = 3
 BUSINESS_START = time(7, 0)
 BUSINESS_END = time(22, 0)
+
 call_time_str = os.getenv("FIXED_CALL_TIME", "07:13")
 h, m = map(int, call_time_str.split(":"))
 FIXED_CALL_TIME = time(h, m)
+
 # ======================================================
 # ================== APP ===============================
 # ======================================================
@@ -70,13 +68,7 @@ else:
 # ======================================================
 
 def get_db():
-    return psycopg2.connect(
-        host=DB_HOST,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        dbname=DB_NAME,
-        port=DB_PORT
-    )
+    return psycopg2.connect(DATABASE_URL)
 
 # ======================================================
 # ================== CALL FUNCTION =====================
@@ -98,6 +90,17 @@ def trigger_call(customer_id, phone):
         print("Call failed:", e)
 
 # ======================================================
+# ================== KEEP ALIVE ========================
+# ======================================================
+
+def keep_alive():
+    try:
+        urllib.request.urlopen(f"{NGROK_URL}/")
+        print("Keep alive ping sent")
+    except:
+        pass
+
+# ======================================================
 # ================== AUTO CALL ENGINE ==================
 # ======================================================
 
@@ -106,20 +109,16 @@ def enterprise_auto_call():
     now = datetime.now()
     current_time = now.time()
 
-    # Only trigger at fixed time
     if current_time.hour != FIXED_CALL_TIME.hour or current_time.minute != FIXED_CALL_TIME.minute:
         return
 
-    # Business hours check
     if not (BUSINESS_START <= current_time <= BUSINESS_END):
         print("Outside business hours")
         return
 
     conn = get_db()
-    # Use RealDictCursor so rows behave like dicts (same as MySQL's dictionary=True)
     cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-    # Reset daily call count if new day (PostgreSQL syntax)
     cursor.execute("""
         UPDATE customers
         SET daily_call_count = 0
@@ -128,7 +127,6 @@ def enterprise_auto_call():
     """)
     conn.commit()
 
-    # Fetch eligible customers (PostgreSQL interval syntax)
     cursor.execute("""
         SELECT * FROM customers
         WHERE due_date <= CURRENT_DATE + INTERVAL '3 days'
@@ -222,7 +220,6 @@ async def voice(request: Request):
     # ================= CUSTOMER RESPONSE =================
 
     customer_text = speech_result.strip()
-
     ai_reply = "Thank you for your response. We appreciate your time. Goodbye."
 
     cursor.execute("""
@@ -278,7 +275,6 @@ def call_logs():
 
 @app.post("/make-call/{customer_id}")
 def make_call(customer_id: int):
-
     conn = get_db()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute("SELECT phone FROM customers WHERE id = %s", (customer_id,))
@@ -290,7 +286,7 @@ def make_call(customer_id: int):
         return {"error": "Customer not found"}
 
     trigger_call(customer_id, customer["phone"])
-    return {"message": "Call triggered manually"}
+    return {"message": "Call triggered successfully"}
 
 # ======================================================
 # ================== SCHEDULER =========================
@@ -298,6 +294,7 @@ def make_call(customer_id: int):
 
 scheduler = BackgroundScheduler()
 scheduler.add_job(enterprise_auto_call, "interval", minutes=1)
+scheduler.add_job(keep_alive, "interval", minutes=14)
 scheduler.start()
 
 @app.on_event("shutdown")
