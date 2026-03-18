@@ -6,7 +6,7 @@ from twilio.twiml.voice_response import VoiceResponse, Gather
 from apscheduler.schedulers.background import BackgroundScheduler
 import psycopg2
 import psycopg2.extras
-from datetime import datetime, time
+from datetime import datetime, time, date
 from dotenv import load_dotenv
 import os
 import urllib.request
@@ -68,6 +68,22 @@ else:
 
 def get_db():
     return psycopg2.connect(DATABASE_URL)
+
+# ======================================================
+# ================== HELPER FUNCTION ===================
+# ======================================================
+
+def format_due_date(due_date_raw):
+    """Safely format due_date whether it's a date object or string"""
+    try:
+        if due_date_raw is None:
+            return "soon"
+        if isinstance(due_date_raw, (datetime, date)):
+            return due_date_raw.strftime("%d %B %Y")
+        # If it's a string, parse it first
+        return datetime.strptime(str(due_date_raw), "%Y-%m-%d").strftime("%d %B %Y")
+    except Exception:
+        return str(due_date_raw)
 
 # ======================================================
 # ================== CALL FUNCTION =====================
@@ -191,7 +207,7 @@ async def voice(request: Request):
 
         name = customer["name"]
         amount = customer["due_amount"]
-        due_date = customer["due_date"].strftime("%d %B %Y")
+        due_date = format_due_date(customer["due_date"])  # ✅ Safe format
 
         form = await request.form()
         speech_result = form.get("SpeechResult")
