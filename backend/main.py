@@ -6,7 +6,7 @@ from twilio.twiml.voice_response import VoiceResponse, Gather
 from apscheduler.schedulers.background import BackgroundScheduler
 import psycopg2
 import psycopg2.extras
-from datetime import datetime, time, date
+from datetime import datetime, time
 from dotenv import load_dotenv
 import os
 import urllib.request
@@ -33,6 +33,10 @@ IST = pytz.timezone("Asia/Kolkata")
 MAX_CALLS_PER_DAY = 3
 BUSINESS_START = time(7, 0)
 BUSINESS_END = time(22, 0)
+
+call_time_str = os.getenv("FIXED_CALL_TIME", "07:13")
+h, m = map(int, call_time_str.split(":"))
+FIXED_CALL_TIME = time(h, m)
 
 # ======================================================
 # ================== APP ===============================
@@ -70,22 +74,6 @@ def get_db():
     return psycopg2.connect(DATABASE_URL)
 
 # ======================================================
-# ================== HELPER FUNCTION ===================
-# ======================================================
-
-def format_due_date(due_date_raw):
-    """Safely format due_date whether it's a date object or string"""
-    try:
-        if due_date_raw is None:
-            return "soon"
-        if isinstance(due_date_raw, (datetime, date)):
-            return due_date_raw.strftime("%d %B %Y")
-        # If it's a string, parse it first
-        return datetime.strptime(str(due_date_raw), "%Y-%m-%d").strftime("%d %B %Y")
-    except Exception:
-        return str(due_date_raw)
-
-# ======================================================
 # ================== CALL FUNCTION =====================
 # ======================================================
 
@@ -121,20 +109,15 @@ def keep_alive():
 
 def enterprise_auto_call():
     try:
-        # Read call time dynamically every minute
-        call_time_str = os.getenv("FIXED_CALL_TIME", "07:13")
-        h, m = map(int, call_time_str.split(":"))
-        FIXED_CALL_TIME = time(h, m)
-
         now = datetime.now(IST)
-        current_time = now.time().replace(tzinfo=None)
+        current_time = now.time()
 
         print(f"Scheduler tick — IST time: {now.strftime('%H:%M:%S')} | Target: {FIXED_CALL_TIME.hour}:{FIXED_CALL_TIME.minute:02d}")
 
         if current_time.hour != FIXED_CALL_TIME.hour or current_time.minute != FIXED_CALL_TIME.minute:
             return
 
-        if not (BUSINESS_START <= current_time <= BUSINESS_END):
+        if not (BUSINESS_START <= current_time.replace(tzinfo=None) <= BUSINESS_END):
             print("Outside business hours")
             return
 
@@ -162,6 +145,7 @@ def enterprise_auto_call():
 
         for customer in customers:
             trigger_call(customer["id"], customer["phone"])
+
             cursor.execute("""
                 UPDATE customers
                 SET daily_call_count = daily_call_count + 1,
@@ -184,118 +168,91 @@ def enterprise_auto_call():
 
 @app.post("/voice")
 async def voice(request: Request):
-    try:
-        response = VoiceResponse()
-        customer_id = request.query_params.get("customer_id")
 
-        if not customer_id:
-            response.say("Customer information missing.")
-            response.hangup()
-            return Response(str(response), media_type="application/xml")
+    response = VoiceResponse()
+    customer_id = request.query_params.get("customer_id")
 
-        conn = get_db()
-        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cursor.execute("SELECT * FROM customers WHERE id = %s", (customer_id,))
-        customer = cursor.fetchone()
+    if not customer_id:
+        response.say("Customer information missing.")
+        response.hangup()
+        return Response(str(response), media_type="application/xml")
 
-        if not customer:
-            cursor.close()
-            conn.close()
-            response.say("Customer not found.")
-            response.hangup()
-            return Response(str(response), media_type="application/xml")
+    conn = get_db()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-        name = customer["name"]
-        amount = customer["due_amount"]
-        due_date = format_due_date(customer["due_date"])  # ✅ Safe format
+    cursor.execute("SELECT * FROM customers WHERE id = %s", (customer_id,))
+    customer = cursor.fetchone()
 
-        form = await request.form()
-        speech_result = form.get("SpeechResult")
+    if not customer:
+        cursor.close()
+        conn.close()
+        response.say("Customer not found.")
+        response.hangup()
+        return Response(str(response), media_type="application/xml")
 
-        # ================= FIRST MESSAGE =================
-        if not speech_result:
-            gather = Gather(
-                input="speech",
-                action=f"{NGROK_URL}/voice?customer_id={customer_id}",
-                method="POST",
-                timeout=6,
-                speech_timeout="auto"
-            )
+    name = customer["name"]
+    amount = customer["due_amount"]
+    due_date = customer["due_date"].strftime("%d %B %Y")
 
-            professional_message = (
-                f"Hello {name}. "
-                f"This is a friendly reminder from your insurance provider. "
-                f"Your premium amount of {amount} rupees is due on {due_date}. "
-                f"Please confirm if you will complete the payment today."
-            )
+    form = await request.form()
+    speech_result = form.get("SpeechResult")
 
-            gather.say(professional_message, voice="alice", language="en-IN")
-            response.append(gather)
-            response.say("We did not receive any response. Thank you. Goodbye.", voice="alice", language="en-IN")
-            response.hangup()
+    # ================= FIRST MESSAGE =================
+    if not speech_result:
 
-            cursor.close()
-            conn.close()
-            return Response(str(response), media_type="application/xml")
+        gather = Gather(
+            input="speech",
+            action=f"/voice?customer_id={customer_id}",
+            method="POST",
+            timeout=6,
+            speech_timeout="auto"
+        )
 
-        # ================= CUSTOMER RESPONSE =================
-        customer_text = speech_result.strip()
-        customer_lower = customer_text.lower()
+        professional_message = (
+            f"Hello {name}. "
+            f"This is a friendly reminder from your insurance provider. "
+            f"Your premium amount of {amount} rupees is due on {due_date}. "
+            f"Please confirm if you will complete the payment today."
+        )
 
-        if any(word in customer_lower for word in ["yes", "okay", "sure", "will", "pay", "today", "done", "paid"]):
-            ai_reply = (
-                f"Thank you {name}! We are glad to hear that. "
-                f"Please complete your payment of {amount} rupees before {due_date}. "
-                f"Thank you for choosing our insurance. Goodbye!"
-            )
-        elif any(word in customer_lower for word in ["no", "cant", "cannot", "not", "later", "tomorrow", "next"]):
-            ai_reply = (
-                f"We understand {name}. Please try to complete your payment of {amount} rupees "
-                f"as soon as possible to avoid any policy lapse. "
-                f"We will follow up with you again. Thank you. Goodbye!"
-            )
-        elif any(word in customer_lower for word in ["help", "problem", "issue", "wrong", "error"]):
-            ai_reply = (
-                f"We are sorry to hear that {name}. "
-                f"Please contact our customer support for assistance. "
-                f"Your payment of {amount} rupees is due on {due_date}. Thank you. Goodbye!"
-            )
-        else:
-            ai_reply = (
-                f"Thank you for your response {name}. "
-                f"Please remember your payment of {amount} rupees is due on {due_date}. "
-                f"Thank you. Goodbye!"
-            )
+        gather.say(professional_message)
+        response.append(gather)
 
-        cursor.execute("""
-            INSERT INTO call_logs
-            (customer_id, customer_text, ai_response,
-             call_status, outcome, escalation_flag,
-             created_at, intent_confidence, ai_summary, sentiment)
-            VALUES (%s, %s, %s, 'completed', 'response_recorded', FALSE, %s, 1.0, %s, 'neutral')
-        """, (
-            customer_id,
-            customer_text,
-            ai_reply,
-            datetime.now(),
-            customer_text
-        ))
+        response.say("We did not receive any response. Thank you. Goodbye.")
+        response.hangup()
 
-        conn.commit()
         cursor.close()
         conn.close()
 
-        response.say(ai_reply, voice="alice", language="en-IN")
-        response.hangup()
-
         return Response(str(response), media_type="application/xml")
 
-    except Exception as e:
-        print(f"Voice handler error: {e}")
-        error_response = VoiceResponse()
-        error_response.say("We are experiencing technical difficulties. Please try again later. Goodbye.")
-        error_response.hangup()
-        return Response(str(error_response), media_type="application/xml")
+    # ================= CUSTOMER RESPONSE =================
+
+    customer_text = speech_result.strip()
+    ai_reply = "Thank you for your response. We appreciate your time. Goodbye."
+
+    cursor.execute("""
+        INSERT INTO call_logs
+        (customer_id, customer_text, ai_response,
+         call_status, outcome, escalation_flag,
+         created_at, intent_confidence, ai_summary, sentiment)
+        VALUES (%s, %s, %s, 'completed', 'response_recorded', FALSE, %s, 1.0, %s, 'neutral')
+    """, (
+        customer_id,
+        customer_text,
+        ai_reply,
+        datetime.now(),
+        customer_text
+    ))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    response.say(ai_reply)
+    response.hangup()
+
+    return Response(str(response), media_type="application/xml")
 
 # ======================================================
 # ================== API ENDPOINTS =====================
@@ -308,14 +265,11 @@ def home():
 @app.get("/server-time")
 def server_time():
     now = datetime.now(IST)
-    call_time_str = os.getenv("FIXED_CALL_TIME", "07:13")
-    h, m = map(int, call_time_str.split(":"))
-    fixed = time(h, m)
     return {
         "ist_time": now.strftime("%H:%M:%S"),
         "ist_date": now.strftime("%Y-%m-%d"),
-        "fixed_call_time": f"{fixed.hour}:{fixed.minute:02d}",
-        "match": now.hour == fixed.hour and now.minute == fixed.minute
+        "fixed_call_time": f"{FIXED_CALL_TIME.hour}:{FIXED_CALL_TIME.minute:02d}",
+        "match": now.hour == FIXED_CALL_TIME.hour and now.minute == FIXED_CALL_TIME.minute
     }
 
 @app.get("/customers")
@@ -352,11 +306,6 @@ def make_call(customer_id: int):
 
     trigger_call(customer_id, customer["phone"])
     return {"message": "Call triggered successfully"}
-
-@app.post("/trigger-auto-call")
-def trigger_auto_call():
-    enterprise_auto_call()
-    return {"message": "Auto call triggered manually"}
 
 # ======================================================
 # ================== SCHEDULER =========================
