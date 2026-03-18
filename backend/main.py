@@ -166,7 +166,7 @@ def enterprise_auto_call():
 # ================== VOICE HANDLER =====================
 # ======================================================
 
-@app.post("/voice")
+@app.api_route("/voice", methods=["GET", "POST"])
 async def voice(request: Request):
 
     response = VoiceResponse()
